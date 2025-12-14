@@ -1,0 +1,25 @@
+# Local .terraform directories
+**/.terraform/*
+
+# .tfstate files
+*.tfstate
+*.tfstate.*
+
+# Crash log files
+crash.log
+*.log
+
+# Zip files (We build these fresh)
+*.zip
+
+# Ignore override files as they are usually local configurations
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Mac system files
+.DS_Store
+
+# AWS CLI files
+aws-cli/
