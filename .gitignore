@@ -23,3 +23,5 @@ override.tf.json
 
 # AWS CLI files
 aws-cli/
+
+.terraform.lock.hcl
