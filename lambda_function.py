@@ -4,7 +4,7 @@ import os
 
 def lambda_handler(event, context):
     ec2 = boto3.client('ec2')
-    sns = boto3.client('sns') # <--- NEW: Client for notifications
+    sns = boto3.client('sns') # <---Client for notifications
     
     # Get the SNS Topic ARN from the environment variable (set in Terraform)
     sns_topic_arn = os.environ['SNS_TOPIC_ARN']
@@ -15,7 +15,7 @@ def lambda_handler(event, context):
         group_id = request_params.get('groupId')
         
         # Capture the User Identity (Who did this?)
-        # CloudTrail sends this info! Let's grab it for the report.
+       
         user_identity = detail.get('userIdentity', {})
         user_arn = user_identity.get('arn', 'Unknown User')
 
@@ -46,7 +46,7 @@ def lambda_handler(event, context):
                         )
                         print(f"REMEDIATED: Revoked rule.")
                         
-                        # 2. NOTIFY (The New Part)
+                        # 2. NOTIFY 
                         message = (
                             f"🚨 SECURITY ALERT 🚨\n\n"
                             f"Violation: SSH (Port 22) opened to the entire world (0.0.0.0/0).\n"

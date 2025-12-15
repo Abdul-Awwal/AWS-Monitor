@@ -16,7 +16,7 @@ provider "aws" {
   }
 }
 
-# 2. IAM Role: "The Identity"
+# 2. IAM Role
 # This allows the Lambda service to assume this role.
 resource "aws_iam_role" "remediation_role" {
   name = "security-remediation-role"
@@ -33,8 +33,8 @@ resource "aws_iam_role" "remediation_role" {
   })
 }
 
-# 3. IAM Policy: "The Permissions"
-# We grant the Lambda permission to:
+# 3. IAM Policy
+# Grant the Lambda permission to:
 # A. Create Logs (CloudWatch)
 # B. Revoke Security Group Rules (The fix)
 # C. Publish to SNS (The alert)
@@ -79,9 +79,9 @@ resource "aws_sns_topic" "alerts_topic" {
   name = "security-alerts-topic"
 }
 
-# 5. The Lambda Function (The Brain)
+# 5. The Lambda Function 
 resource "aws_lambda_function" "remediator" {
-  filename      = "lambda.zip"         # erraform cannot create an AWS Lambda function without a code package (zip file) present
+  filename      = "lambda.zip"         # Terraform cannot create an AWS Lambda function without a code package (zip file) present
   function_name = "security-remediator"
   role          = aws_iam_role.remediation_role.arn
   handler       = "lambda_function.lambda_handler" # filename.methodname
@@ -100,7 +100,7 @@ resource "aws_lambda_function" "remediator" {
 }
 
 
-# 6. EventBridge Rule: "The Detective"
+# 6. EventBridge Rule
 # specific event pattern to watch for Security Group changes
 resource "aws_cloudwatch_event_rule" "sg_change_rule" {
   name        = "capture-sg-changes"
@@ -119,7 +119,7 @@ resource "aws_cloudwatch_event_rule" "sg_change_rule" {
   })
 }
 
-# 7. EventBridge Target: " The Connector"
+# 7. EventBridge Target
 # Connects the Rule (Detective) to the Lambda (Enforcer)
 resource "aws_cloudwatch_event_target" "target_lambda" {
   rule      = aws_cloudwatch_event_rule.sg_change_rule.name
@@ -127,7 +127,7 @@ resource "aws_cloudwatch_event_target" "target_lambda" {
   arn       = aws_lambda_function.remediator.arn
 }
 
-# 8. Lambda Permission: "The Key"
+# 8. Lambda Permission=
 # Explicitly allow EventBridge to trigger this specific function
 resource "aws_lambda_permission" "allow_eventbridge" {
   statement_id  = "AllowExecutionFromEventBridge"
