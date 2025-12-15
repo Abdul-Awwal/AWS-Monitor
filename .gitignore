@@ -9,10 +9,10 @@
 crash.log
 *.log
 
-# Zip files (We build these fresh)
+# Zip files
 *.zip
 
-# Ignore override files as they are usually local configurations
+# Ignore override files 
 override.tf
 override.tf.json
 *_override.tf
