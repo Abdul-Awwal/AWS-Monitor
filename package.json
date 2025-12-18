@@ -1,0 +1,19 @@
+{
+    "name": "aws-monitor",
+    "main": "index.ts",
+    "devDependencies": {
+        "@types/node": "^18",
+        "typescript": "^5.0.0"
+    },
+    "dependencies": {
+        "@pulumi/aws": "^7.0.0",
+        "@pulumi/awsx": "^3.0.0",
+        "@pulumi/pulumi": "^3.113.0"
+    },
+    "scripts": {
+        "build": "tsc",
+        "preview": "pulumi preview",
+        "up": "pulumi up",
+        "destroy": "pulumi destroy"
+    }
+}

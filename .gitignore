@@ -1,27 +1,29 @@
-# Local .terraform directories
-**/.terraform/*
+# Pulumi
+/bin/
+/node_modules/
 
-# .tfstate files
+# Pulumi state and secrets
+Pulumi.*.yaml
+!Pulumi.yaml
+
+# TypeScript
+*.js
+*.d.ts
+/dist/
+
+# Terraform (legacy - keeping for reference)
 *.tfstate
 *.tfstate.*
+.terraform/
+*.tfvars
+lambda.zip
 
-# Crash log files
-crash.log
-*.log
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
 
-# Zip files
-*.zip
-
-# Ignore override files 
-override.tf
-override.tf.json
-*_override.tf
-*_override.tf.json
-
-# Mac system files
+# OS
 .DS_Store
-
-# AWS CLI files
-aws-cli/
-
-.terraform.lock.hcl
+Thumbs.db
