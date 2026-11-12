@@ -1,75 +1,84 @@
-## ABOUT:
-A serverless DevSecOps framework that automatically detects and remediates security misconfigurations in real-time. This project enforces "Least Privilege" by detecting resource changes via AWS EventBridge, validating and instantly revoking change via AWS Lambda and alerting the security team via AWS SNS.
+# AWS-Monitor — Serverless Security Auto-Remediation
 
-## Functional Requirements:
-- System must continuously monitor the AWS environment for changes to Security Group configurations
-- Upon detecting a change, the system must programmatically inspect the specific security group rule to determine if it violates security policy.
-- If a violation is confirmed, the system must immediately revoke the non-compliant rule.
-- The security team must be immediately notified whenever a remediation action occurs or a warning is issued.
+A serverless DevSecOps framework that detects and remediates AWS security misconfigurations in near real-time. When someone opens SSH (port 22) to the world on a Security Group, the system detects the change via CloudTrail + EventBridge, automatically revokes the offending rule with Lambda, and alerts the security team through SNS — typically within seconds, with no human intervention.
 
+**Stack:** Terraform · Python 3.9 (Boto3) · AWS Lambda · EventBridge · CloudTrail · SNS · IAM
 
-## Product Flowchart:
-<img width="701" height="716" alt="image" src="https://github.com/user-attachments/assets/167a9952-b80b-4638-94c9-66ca289a1aa5" />
+## How It Works
 
+```
+Security Group change ──> CloudTrail ──> EventBridge rule ──> Lambda ──┬──> Revoke rule (EC2)
+   (AuthorizeSecurityGroupIngress)                                     └──> Alert team (SNS email)
+```
 
+1. **Detection** — CloudTrail records every `AuthorizeSecurityGroupIngress` / `RevokeSecurityGroupIngress` API call. An EventBridge rule matches these events and invokes the Lambda function.
+2. **Analysis** — The Lambda (`lambda_function.py`) describes the affected Security Group and inspects each ingress rule for the policy violation: **port 22 open to `0.0.0.0/0`**.
+3. **Remediation** — If a violation is confirmed, the Lambda immediately calls `revoke_security_group_ingress` to delete the non-compliant rule.
+4. **Alerting** — An SNS notification is published to the security team identifying the resource, the violation, the action taken, and the IAM identity responsible (pulled from the CloudTrail event's `userIdentity`).
 
+### Architecture Flowchart
 
+<img width="701" height="716" alt="Architecture flowchart" src="https://github.com/user-attachments/assets/167a9952-b80b-4638-94c9-66ca289a1aa5" />
 
+## Repository Structure
 
-## Technology:
-- **Infrastructure as Code:** Terraform
-    
-- **Cloud Provider:** AWS (Lambda, EventBridge, IAM, CloudTrail, SNS, EC2)
-    
-- **Language:** Python 3.9 (Boto3 SDK)
-    
-- **Concepts:** Event-Driven Architecture, Serverless, Real-time Compliance
+| File | Purpose |
+| --- | --- |
+| `main.tf` | Provisions the full stack: IAM role + least-privilege policy, Lambda function, SNS topic, EventBridge rule/target, and the Lambda invoke permission |
+| `lambda_function.py` | Detection, remediation, and alerting logic (Boto3) |
+| `vulnerable-resources.tf` | Intentionally misconfigured test resources used to validate the pipeline |
 
-## Application Breakdown:
-- **Infrastructure:** Terraform provisions the entire stack (IAM roles, Lambda function, SNS Topic, EventBridge rules).
-    
-- **Detection:** EventBridge monitors CloudTrail for `AuthorizeSecurityGroupIngress` API calls.
-    
-- **Analysis:** The Python Lambda function parses the JSON payload to inspect the specific Security Group rules.
-    
-- **Remediation:** If a rule allows `0.0.0.0/0` on Port 22, the Lambda revokes it immediately using the `boto3` library.
-    
-- **Alerting:** An email notification is sent to the administrator detailing the violation and the user responsible.
+## Deployment
 
+**Prerequisites:** Terraform, AWS CLI configured (`aws configure`), and an AWS account.
 
-## Demo Screenshots:
-1. Creating a vulnerable security group through Security Groups on the EC2 service:
-<img width="704" height="202" alt="image" src="https://github.com/user-attachments/assets/67ae0232-7cb4-4989-87cc-1e12fafec16b" />
+```bash
+# 1. Package the Lambda code (Terraform expects lambda.zip)
+zip lambda.zip lambda_function.py
 
+# 2. Deploy the stack
+terraform init
+terraform plan
+terraform apply
+```
 
-2. Checking Cloud trail logs to show event(RevokeSecurityGroup) performed by security-remediator:
-<img width="703" height="83" alt="image" src="https://github.com/user-attachments/assets/841e415d-eb69-4f75-ba2a-3412dbd7e821" />
+> **Note:** Make sure the region in `main.tf` matches the region set in `aws configure`, and subscribe an email address to the `security-alerts-topic` SNS topic to receive alerts. EventBridge also requires a CloudTrail trail that logs **Write** management events — see test #8 below for how this surfaced during testing.
 
+## Demo
+
+1. Creating a vulnerable Security Group rule (SSH open to the world) via the EC2 console:
+
+<img width="704" height="202" alt="Creating a vulnerable security group rule" src="https://github.com/user-attachments/assets/67ae0232-7cb4-4989-87cc-1e12fafec16b" />
+
+2. CloudTrail logs showing the `RevokeSecurityGroup` event performed automatically by `security-remediator`:
+
+<img width="703" height="83" alt="CloudTrail revoke event" src="https://github.com/user-attachments/assets/841e415d-eb69-4f75-ba2a-3412dbd7e821" />
 
 3. Lambda execution logs verifying the automated detection and remediation logic:
-<img width="704" height="80" alt="image" src="https://github.com/user-attachments/assets/ea0434c2-ae5a-4714-9a8b-2b24fc42eb32" />
 
+<img width="704" height="80" alt="Lambda execution logs" src="https://github.com/user-attachments/assets/ea0434c2-ae5a-4714-9a8b-2b24fc42eb32" />
 
-4. Email screenshot showing successful AWS Simple Notification Service(SNS) execution:
+4. SNS email alert confirming the remediation and identifying the responsible user:
 
-<img width="746" height="313" alt="image" src="https://github.com/user-attachments/assets/28e79c96-efb6-43f4-a2b2-ae21190a82e2" />
+<img width="746" height="313" alt="SNS email alert" src="https://github.com/user-attachments/assets/28e79c96-efb6-43f4-a2b2-ae21190a82e2" />
 
+## Testing
 
-## Testing:
+End-to-end test log, including failures encountered and how they were resolved:
 
-| S. NO | Action                                                                                                        | Input                                                                                                                                                                                 | Expected Output                                             | Actual Output                                                                                                                                                                                                                                                                                                                                       | Test Result | Notes/Comments                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| ----- | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1     | Run AWS Configure to connect to AWS via provisioned dev user.                                                 | `aws configure`<br><br>`aws sts get-caller-identity`                                                                                                                                  | ARN line should end with expected user `AbdulDev`           | ARN line ended with expected user `AbdulDev`                                                                                                                                                                                                                                                                                                        | Pass        |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| 2     | Run Terraform plan and apply to push configured Security Group, Lamda, SNS topic and  to AWS Eventbridge rule | `Terraform Plan`<br>`Terraform apply`                                                                                                                                                 | Apply complete, Configured resources reflect on AWS Console | `Error: configuring Terraform AWS Provider: validating provider credentials: retrieving caller identity from STS: operation error STS: GetCallerIdentity, https response error StatusCode: 0, RequestID: , request send failed, Post "https://sts.us-east-1.amazonaws.com/": dial tcp: lookup sts.us-east-1.amazonaws.com on (MY IP): no such host` | Fail        | The region specified in main.tf on line 12 did not match the region specified when logging in with `AWS Configure`. Changed region to match each other and ran the test again.                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| 3     | Run Terraform plan and apply to push configured Security Group, Lamda, SNS topic and  to AWS Eventbridge rule | `Terraform Plan`<br>`Terraform apply`                                                                                                                                                 | Apply complete, Configured resources reflect on AWS Console | `Apply complete! Resources: 4 added, 0 changed, 0 destroyed.`                                                                                                                                                                                                                                                                                       | Pass        |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| 4     | Create Security Group rule allowing SSH traffic from any IP                                                   | Configured via AWS Console                                                                                                                                                            | Rule successfully added                                     | Rule successfully added                                                                                                                                                                                                                                                                                                                             | Pass        |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| 5     | Security Group rule should automatically be deleted after ~5 seconds                                          | None                                                                                                                                                                                  | Rule deleted, RevokeSecurityGroup event in cloudtrail       | Rule was not deleted, event was not created                                                                                                                                                                                                                                                                                                         | Fail        |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| 6     | Lambda function test to delete security group rule, created an `Event` to trigger rule deletion               | ```{<br>  "detail": {<br>    "eventName": "AuthorizeSecurityGroupIngress",<br>    "requestParameters": {<br>      "groupId": "sg-REPLACE_ME_WITH_REAL_ID"<br>    }<br>  }<br>}<br>``` | Rule successfully deleted                                   | Rule successfully deleted                                                                                                                                                                                                                                                                                                                           | Pass        | Created lambda test to see if it was a permission issue                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| 7     | Create Security Group rule allowing SSH traffic from any IP                                                   | Configured via AWS Console                                                                                                                                                            | Rule successfully added                                     | Rule successfully added                                                                                                                                                                                                                                                                                                                             | Pass        |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| 8     | Security Group rule should automatically be deleted after ~5 seconds                                          | None                                                                                                                                                                                  | Rule deleted, RevokeSecurityGroup event in cloudtrail       | Rule deleted, RevokeSecurityGroup event in cloudtrail                                                                                                                                                                                                                                                                                               | Pass        | To fix the issue where the Lambda function worked manually but failed to trigger automatically, I first verified that the `AuthorizeSecurityGroupIngress`event was actually being recorded in the CloudTrail history. The root cause was identified as a missing link between CloudTrail and EventBridge, which was resolved by creating a new CloudTrail "Trail" specifically configured to log and export "Write" management events. This successfully established the event pipeline, allowing EventBridge to detect the specific API call and automatically trigger the Lambda function to remediate the security violation. |
-|       |                                                                                                               |                                                                                                                                                                                       |                                                             |                                                                                                                                                                                                                                                                                                                                                     |             |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| # | Action | Input | Expected Output | Actual Output | Result | Notes |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | Connect to AWS via provisioned dev user | `aws configure`, `aws sts get-caller-identity` | ARN ends with expected user `AbdulDev` | ARN ended with expected user | ✅ Pass | |
+| 2 | `terraform plan` / `apply` to provision the stack | Terraform CLI | Apply complete; resources visible in console | STS credential validation error: `dial tcp: lookup sts.us-east-1.amazonaws.com ... no such host` | ❌ Fail | Region in `main.tf` didn't match the region set in `aws configure`. Aligned the regions and re-ran. |
+| 3 | `terraform plan` / `apply` (retry) | Terraform CLI | Apply complete | `Apply complete! Resources: 4 added, 0 changed, 0 destroyed.` | ✅ Pass | |
+| 4 | Create SG rule allowing SSH from any IP | AWS Console | Rule added | Rule added | ✅ Pass | |
+| 5 | Rule auto-deleted within ~5 seconds | None | Rule deleted; `RevokeSecurityGroup` in CloudTrail | Rule was **not** deleted; no event created | ❌ Fail | Investigated below. |
+| 6 | Manually invoke Lambda with a test event | Test event with `AuthorizeSecurityGroupIngress` + real SG ID | Rule deleted | Rule deleted | ✅ Pass | Ruled out a Lambda permissions issue — the function worked; the trigger didn't. |
+| 7 | Create SG rule allowing SSH from any IP | AWS Console | Rule added | Rule added | ✅ Pass | |
+| 8 | Rule auto-deleted within ~5 seconds | None | Rule deleted; `RevokeSecurityGroup` in CloudTrail | Rule deleted; event in CloudTrail | ✅ Pass | **Root cause of #5:** a missing link between CloudTrail and EventBridge. Creating a CloudTrail trail configured to log and export **Write** management events established the event pipeline, allowing EventBridge to detect the API call and trigger the Lambda automatically. |
 
+## Future Work
 
-## Future works:
-- Currently, said system is only limited to security group misconfigurations, would work on expanding it to cover more resources, or explore better alternatives for DevSecOps.
-
+- Expand coverage beyond Security Group misconfigurations to other resource types (e.g., public S3 buckets, overly permissive IAM policies).
+- Make the policy rules configurable (ports, CIDR ranges) rather than hardcoded.
+- Add automated tests and CI for the Lambda logic.
